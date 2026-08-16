@@ -87,6 +87,7 @@ public enum LLMTypeRegistry {
         "hunyuan_v1_dense": create(HunyuanConfiguration.self, HunyuanModel.init),
         "nemotron_labs_diffusion": create(
             NemotronLabsDiffusionConfiguration.self, NemotronLabsDiffusionModel.init),
+        "maple": create(MapleConfiguration.self, MapleModel.init),
     ])
 }
 
@@ -100,6 +101,11 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
 
     /// Shared instance with default model configurations.
     public static let shared = LLMRegistry(modelConfigurations: all())
+
+    static public let maplePreview2Bit = ModelConfiguration(
+        id: "deepgrove/maple-preview-2bit-mlx",
+        defaultPrompt: "Explain why local inference matters."
+    )
 
     static public let smolLM_135M_4bit = ModelConfiguration(
         id: "mlx-community/SmolLM-135M-Instruct-4bit",
@@ -475,6 +481,7 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
 
     private static func all() -> [ModelConfiguration] {
         [
+            maplePreview2Bit,
             codeLlama13b4bit,
             deepSeekR1_7B_4bit,
             falconH1R7B,

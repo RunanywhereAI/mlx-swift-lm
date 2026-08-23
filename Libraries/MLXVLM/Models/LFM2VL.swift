@@ -744,6 +744,9 @@ public struct LFM2VLProcessor: UserInputProcessor {
         return (pixelValues, (totalPatchesH, totalPatchesW), pixelAttentionMask)
     }
 
+    /// The placeholder every LFM2-VL tokenizer uses for an image.
+    static let imageTokenText = "<image>"
+
     public func prepare(input: UserInput) async throws -> LMInput {
         let messages = Qwen2VLMessageGenerator().generate(from: input)
 
@@ -781,9 +784,15 @@ public struct LFM2VLProcessor: UserInputProcessor {
             totalImageTokens += h * w
         }
 
-        // Replace image placeholder tokens with the correct count
-        // image_token_id is 396 for LFM2 VL models
-        let imageTokenId = 396
+        // Replace image placeholder tokens with the correct count.
+        //
+        // The id is resolved from the tokenizer, not hardcoded. LFM2.5-VL ships
+        // `<image>` at 124907, so a literal 396 matched nothing: the placeholder
+        // was never expanded, and `mergeInputIdsWithImageFeatures` (which reads
+        // `config.imageTokenIndex`) then found one token against a full grid of
+        // features and trapped with
+        // "Image features and image tokens do not match: tokens: 1".
+        let imageTokenId = tokenizer.convertTokenToId(Self.imageTokenText) ?? 396
         var newPromptTokens = [Int]()
         var imageIdx = 0
         var i = 0

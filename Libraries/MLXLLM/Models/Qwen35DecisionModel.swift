@@ -71,7 +71,12 @@ public enum ClefDecisionModelError: Error, LocalizedError {
 // MARK: - Model
 
 /// A decision checkpoint: Qwen3.5 backbone plus joint decision head.
-public final class ClefDecisionModel {
+///
+/// `@unchecked Sendable`: the backbone and head hold `MLXArray` state whose
+/// mutation MLX serializes through its stream scheduler; callers must not run
+/// concurrent `decide` calls on one instance. The SDK runtime serializes
+/// requests per session, and the head only reads after load.
+public final class ClefDecisionModel: @unchecked Sendable {
     public let backbone: Qwen35Model
     public let tokenizer: any Tokenizer
     public let head: ClefJointSchemaHead

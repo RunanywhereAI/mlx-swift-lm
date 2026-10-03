@@ -45,6 +45,8 @@ public struct ClefDecisionAnswer: Sendable {
 /// All answered fields of one request.
 public struct ClefDecisionResult: Sendable {
     public let answers: [ClefDecisionAnswer]
+    /// Tokens of the jointly-evaluated prompt.
+    public let inputTokens: Int
 }
 
 // MARK: - Errors
@@ -123,9 +125,16 @@ public final class ClefDecisionModel {
     }
 
     /// Answers every field of `request` in one forward pass.
+    ///
+    /// - Parameters:
+    ///   - request: State and questions to decide.
+    ///   - maxLength: Context cap in tokens for the encoded prompt.
+    ///   - temperature: Optional softmax temperature applied to the option
+    ///     scores. `nil` (or zero) keeps the model's own scale.
     public func decide(
         _ request: ClefDecisionRequest,
-        maxLength: Int = ClefDecisionEncoder.defaultMaxLength
+        maxLength: Int = ClefDecisionEncoder.defaultMaxLength,
+        temperature: Float? = nil
     ) throws -> ClefDecisionResult {
         let encoding = try ClefDecisionEncoder.encode(
             request, tokenizer: tokenizer, maxLength: maxLength)
@@ -141,7 +150,11 @@ public final class ClefDecisionModel {
             })
 
         let answers = zip(encoding.questions, logits).map { question, scores in
-            let probabilities = MLX.softmax(scores.asType(.float32))
+            var scaled = scores.asType(.float32)
+            if let temperature, temperature > 0 {
+                scaled = scaled / temperature
+            }
+            let probabilities = MLX.softmax(scaled)
             let values = probabilities.asArray(Float.self)
             var byKey = [String: Float]()
             for (id, value) in zip(question.optionIds, values) {
@@ -152,7 +165,7 @@ public final class ClefDecisionModel {
                 optionIds: question.optionIds, probabilities: byKey)
         }
 
-        return ClefDecisionResult(answers: answers)
+        return ClefDecisionResult(answers: answers, inputTokens: encoding.inputIds.count)
     }
 
     // MARK: - Lexical lookup

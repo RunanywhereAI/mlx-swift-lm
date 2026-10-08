@@ -104,6 +104,7 @@ public enum VLMTypeRegistry {
         "pixtral": create(PixtralConfiguration.self, PixtralVLM.init),
         "mistral3": create(Mistral3VLMConfiguration.self, Mistral3VLM.init),
         "lfm2_vl": create(LFM2VLConfiguration.self, LFM2VL.init),
+        "d1_omni": create(D1OmniConfiguration.self, D1Omni.init),
         "lfm2-vl": create(LFM2VLConfiguration.self, LFM2VL.init),
         "glm_ocr": create(GlmOcrConfiguration.self, GlmOcr.init),
         "muse_glimmer": create(MuseGlimmerConfiguration.self, MuseGlimmer.init),

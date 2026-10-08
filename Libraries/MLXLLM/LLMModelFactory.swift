@@ -88,6 +88,7 @@ public enum LLMTypeRegistry {
         "nemotron_labs_diffusion": create(
             NemotronLabsDiffusionConfiguration.self, NemotronLabsDiffusionModel.init),
         "maple": create(MapleConfiguration.self, MapleModel.init),
+        "extractor": create(GLiNEREncoderConfiguration.self, GLiNERClassificationNetwork.init),
     ])
 }
 

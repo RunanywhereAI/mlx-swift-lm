@@ -52,7 +52,7 @@ public struct MapleConfiguration: Codable, Sendable {
     var tieWordEmbeddings: Bool = false
     private var quantization: MapleQuantizationConfiguration? = nil
 
-    fileprivate var quantizationGroupSize: Int { quantization?.groupSize ?? 128 }
+    var quantizationGroupSize: Int { quantization?.groupSize ?? 128 }
 
     enum CodingKeys: String, CodingKey {
         case modelType = "model_type"

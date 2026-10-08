@@ -63,6 +63,8 @@ let package = Package(
         // >= 602 tags on current toolchains; a 600.x/601.x resolution falls back to the full
         // source compile of swift-syntax.
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0" ..< "604.0.0"),
+        // Tests only: real-tokenizer weights tests for the decider.
+        .package(url: "https://github.com/huggingface/swift-transformers", .upToNextMinor(from: "1.3.0")),
     ],
     targets: [
         .target(
@@ -148,6 +150,7 @@ let package = Package(
                 "MLXLLM",
                 "MLXVLM",
                 "MLXEmbedders",
+                .product(name: "Tokenizers", package: "swift-transformers"),
             ],
             path: "Tests/MLXLMTests",
             exclude: [

@@ -16,8 +16,12 @@ public final class D1Omni: Module, LanguageModel {
         self._visionModel.wrappedValue = D1OmniVision(config: config)
     }
 
+    func parameter(_ name: String) -> MLXArray? {
+        Dictionary(uniqueKeysWithValues: parameters().flattened())[name]
+    }
+
     func weight(_ name: String) -> MLXArray {
-        guard let value = parameters().flattened()[name] else {
+        guard let value = parameter(name) else {
             preconditionFailure("D1 Omni is missing \(name)")
         }
         return value
@@ -35,7 +39,7 @@ public final class D1Omni: Module, LanguageModel {
 
     func linear(_ input: MLXArray, _ name: String) -> MLXArray {
         let output = matmul(input, weight(name + ".weight").T)
-        if let bias = parameters().flattened()[name + ".bias"] { return output + bias }
+        if let bias = parameter(name + ".bias") { return output + bias }
         return output
     }
 
@@ -47,7 +51,7 @@ public final class D1Omni: Module, LanguageModel {
             return normalized.asType(input.dtype) * weight(name + ".weight")
         }
         return MLXFast.layerNorm(
-            input, weight: weight(name + ".weight"), bias: parameters().flattened()[name + ".bias"],
+            input, weight: weight(name + ".weight"), bias: parameter(name + ".bias"),
             eps: eps)
     }
 

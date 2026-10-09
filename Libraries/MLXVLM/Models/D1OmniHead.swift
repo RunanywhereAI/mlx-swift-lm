@@ -28,7 +28,8 @@ extension D1Omni {
         }
         let selected = states[0..., MLXArray(markers), 0...]
         return linear(
-            gelu(linear(norm(selected, "head.scorer.0"), "head.scorer.1")), "head.scorer.3")[
+            gelu(linear(norm(selected, "head.scorer.norm"), "head.scorer.hidden")),
+            "head.scorer.output")[
                 0, 0..., 0
             ].asType(.float32)
     }

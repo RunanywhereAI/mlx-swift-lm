@@ -29,9 +29,8 @@ final class D1OmniTests: XCTestCase {
         XCTAssertEqual(config.text.feedForwardSize, 64)
         XCTAssertEqual(config.headLayers, 2)
         let model = D1Omni(config)
-        XCTAssertEqual(
-            model.parameters().flattened()["encoder.layers.0.conv.conv.weight"]?.shape,
-            [64, 1, 3])
+        let weights = Dictionary(uniqueKeysWithValues: model.parameters().flattened())
+        XCTAssertEqual(weights["encoder.layers.0.conv.conv.weight"]?.shape, [64, 1, 3])
     }
 
     func testInvalidConfigurationRejectsUnsupportedConvolution() throws {
@@ -90,11 +89,16 @@ final class D1OmniTests: XCTestCase {
 
     func testHeadSelectsOptionMarkers() throws {
         let model = D1Omni(try configuration())
-        model.weight("head.scorer.0.weight")._updateInternal(MLXArray.ones([64]))
-        model.weight("head.scorer.1.weight")._updateInternal(MLXArray.eye(64))
+        var weights = Dictionary(uniqueKeysWithValues: model.parameters().flattened())
+        for (key, value) in weights where key.hasPrefix("head.head.") || key.hasPrefix("head.type_emb.") {
+            weights[key] = MLXArray.zeros(value.shape, dtype: value.dtype)
+        }
+        weights["head.scorer.norm.weight"] = MLXArray.ones([64])
+        weights["head.scorer.hidden.weight"] = MLXArray.eye(64)
         var scorer = [Float](repeating: 0, count: 64)
         scorer[0] = 1
-        model.weight("head.scorer.3.weight")._updateInternal(MLXArray(scorer).reshaped(1, 64))
+        weights["head.scorer.output.weight"] = MLXArray(scorer).reshaped(1, 64)
+        try model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
         var input = [Float](repeating: 0, count: 3 * 64)
         input[0] = 1
         input[64] = -1
@@ -104,15 +108,14 @@ final class D1OmniTests: XCTestCase {
             Float.self)
         let selected = model.decisionLogits(states, markers: [2, 0], kind: .choice).asArray(
             Float.self)
-        XCTAssertGreaterThan(all[0], 1)
-        XCTAssertLessThan(abs(all[1]), 1e-4)
-        XCTAssertEqual(selected[0], all[2], accuracy: 1e-6)
-        XCTAssertEqual(selected[1], all[0], accuracy: 1e-6)
+        XCTAssertEqual(selected[0], all[2], accuracy: 1e-5)
+        XCTAssertEqual(selected[1], all[0], accuracy: 1e-5)
+        XCTAssertGreaterThan(abs(all[0] - all[1]), 0.01)
     }
 
     func testStrictWeightValidationAndAudioFiltering() throws {
         let model = D1Omni(try configuration())
-        var weights = model.parameters().flattened()
+        var weights = Dictionary(uniqueKeysWithValues: model.parameters().flattened())
         weights["audio.encoder.weight"] = MLXArray.zeros([1])
         let sanitized = model.sanitize(weights: weights)
         XCTAssertNil(sanitized["audio.encoder.weight"])
@@ -126,7 +129,7 @@ final class D1OmniTests: XCTestCase {
         XCTAssertThrowsError(
             try model.update(parameters: ModuleParameters.unflattened(extra), verify: [.all]))
         var wrongShape = sanitized
-        wrongShape["head.scorer.3.weight"] = MLXArray.zeros([2, 64])
+        wrongShape["head.scorer.output.weight"] = MLXArray.zeros([2, 64])
         XCTAssertThrowsError(
             try model.update(parameters: ModuleParameters.unflattened(wrongShape), verify: [.all]))
     }

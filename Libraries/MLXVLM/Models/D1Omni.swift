@@ -31,8 +31,13 @@ public final class D1Omni: Module, LanguageModel {
         var result = [String: MLXArray]()
         for (name, value) in weights {
             if name.hasPrefix("audio.") { continue }
-            result[name.replacingOccurrences(
-                of: "vision.tower.vision_model.", with: "vision.tower.")] = value
+            let canonical = name.replacingOccurrences(
+                of: "vision.tower.vision_model.", with: "vision.tower."
+            )
+            .replacingOccurrences(of: "head.scorer.0.", with: "head.scorer.norm.")
+            .replacingOccurrences(of: "head.scorer.1.", with: "head.scorer.hidden.")
+            .replacingOccurrences(of: "head.scorer.3.", with: "head.scorer.output.")
+            result[canonical] = value
         }
         return result
     }

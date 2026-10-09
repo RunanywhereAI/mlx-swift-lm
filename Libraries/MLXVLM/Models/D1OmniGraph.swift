@@ -144,9 +144,9 @@ final class D1OmniHeadStack: Module {
 }
 
 final class D1OmniScorer: Module {
-    @ModuleInfo(key: "0") var norm: D1OmniNorm
-    @ModuleInfo(key: "1") var hidden: Linear
-    @ModuleInfo(key: "3") var output: Linear
+    @ModuleInfo(key: "norm") var norm: D1OmniNorm
+    @ModuleInfo(key: "hidden") var hidden: Linear
+    @ModuleInfo(key: "output") var output: Linear
 
     init(hidden: Int) {
         self._norm.wrappedValue = D1OmniNorm(hidden)

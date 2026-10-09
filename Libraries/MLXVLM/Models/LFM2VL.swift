@@ -151,12 +151,14 @@ private enum Vision {
         let patchSize: Int
         let numPatches: Int
         let positionEmbeddingSize: Int
+        let d1Positions: Bool
 
         @ModuleInfo(key: "patch_embedding") var patchEmbedding: Linear
         @ModuleInfo(key: "position_embedding") var positionEmbedding: Embedding
 
-        init(config: LFM2VLConfiguration.VisionConfiguration) {
+        init(config: LFM2VLConfiguration.VisionConfiguration, d1Positions: Bool = false) {
             self.config = config
+            self.d1Positions = d1Positions
             self.embedDim = config.hiddenSize
             self.imageSize = config.imageSize
             self.patchSize = config.patchSize
@@ -230,11 +232,16 @@ private enum Vision {
                 positionEmbeddingSize, positionEmbeddingSize, -1
             )
 
-            let resizedPositionalEmbeddings = VisionEmbeddings.resizePositionalEmbeddings(
-                positionalEmbeddings: positionalEmbeddings,
-                spatialShapes: spatialShapes,
-                maxLength: pixelValues.dim(1)
-            )
+            let resizedPositionalEmbeddings =
+                d1Positions
+                ? D1PositionInterpolation.batch(
+                    embeddings: positionalEmbeddings, spatialShapes: spatialShapes,
+                    length: pixelValues.dim(1), dimensions: embedDim)
+                : VisionEmbeddings.resizePositionalEmbeddings(
+                    positionalEmbeddings: positionalEmbeddings,
+                    spatialShapes: spatialShapes,
+                    maxLength: pixelValues.dim(1)
+                )
 
             let embeddings = patchEmbeds + resizedPositionalEmbeddings
             return embeddings
@@ -248,10 +255,13 @@ private enum Vision {
         @ModuleInfo var encoder: Encoder
         @ModuleInfo(key: "post_layernorm") var postLayernorm: LayerNorm
 
-        init(config: LFM2VLConfiguration.VisionConfiguration, visionFeatureLayer: Int = -1) {
+        init(
+            config: LFM2VLConfiguration.VisionConfiguration, visionFeatureLayer: Int = -1,
+            d1Positions: Bool = false
+        ) {
             self.modelType = config.modelType
 
-            self.embeddings = VisionEmbeddings(config: config)
+            self.embeddings = VisionEmbeddings(config: config, d1Positions: d1Positions)
             self.encoder = Encoder(config: config, visionFeatureLayer: visionFeatureLayer)
             self._postLayernorm.wrappedValue = LayerNorm(
                 dimensions: config.hiddenSize, eps: config.layerNormEps)
@@ -260,12 +270,19 @@ private enum Vision {
         func callAsFunction(
             _ x: MLXArray,
             outputHiddenStates: Bool = false,
-            spatialShapes: MLXArray
+            spatialShapes: MLXArray,
+            pixelAttentionMask: MLXArray? = nil
         ) -> (encoderOutputs: [MLXArray]?, embeddings: MLXArray, lastHiddenState: MLXArray) {
             var embeds = embeddings(x, spatialShapes: spatialShapes)
             embeds = embeds.asType(embeddings.patchEmbedding.weight.dtype)
 
-            let encoderOutputs = encoder(embeds, outputHiddenStates: outputHiddenStates, mask: nil)
+            let mask = pixelAttentionMask.map {
+                MLX.where(
+                    $0.expandedDimensions(axes: [1, 2]).asType(.bool), MLXArray(0.0),
+                    MLXArray(-Float.infinity)
+                ).asType(embeds.dtype)
+            }
+            let encoderOutputs = encoder(embeds, outputHiddenStates: outputHiddenStates, mask: mask)
             let lastHiddenState = postLayernorm(encoderOutputs?.last ?? embeds)
 
             return (encoderOutputs, embeds, lastHiddenState)
@@ -758,7 +775,26 @@ public struct LFM2VLProcessor: UserInputProcessor {
 
         // Text-only input
         if input.images.isEmpty {
+            if config.d1ImageConfiguration != nil {
+                promptTokens = D1TokenEncoding.encode(
+                    tokenizer.decode(tokenIds: promptTokens, skipSpecialTokens: false),
+                    tokenizer: tokenizer)
+            }
             return LMInput(tokens: MLXArray(promptTokens))
+        }
+
+        if let imageConfig = config.d1ImageConfiguration {
+            let images = try input.images.map {
+                MediaProcessing.apply(try $0.asCIImage(), processing: input.processing)
+            }
+            let processed = try D1ImageProcessor(config: imageConfig).prepare(images)
+            let prompt = tokenizer.decode(tokenIds: promptTokens, skipSpecialTokens: false)
+            promptTokens = D1TokenEncoding.encode(
+                try D1ImageProcessor.expand(prompt: prompt, markup: processed.markup, imageCount: images.count),
+                tokenizer: tokenizer)
+            return LMInput(
+                text: .init(tokens: MLXArray(promptTokens).expandedDimensions(axis: 0)),
+                image: processed.pixels.map { .init(pixels: $0, frames: processed.frames) })
         }
 
         // Process images
@@ -868,7 +904,8 @@ public class LFM2VL: Module, VLMModel, KVCacheDimensionProvider {
 
         self._visionModel.wrappedValue = Vision.VisionModel(
             config: config.visionConfiguration,
-            visionFeatureLayer: config.visionFeatureLayer
+            visionFeatureLayer: config.visionFeatureLayer,
+            d1Positions: config.isD1
         )
 
         if config.downsampleFactor > 1 {
@@ -904,7 +941,8 @@ public class LFM2VL: Module, VLMModel, KVCacheDimensionProvider {
 
         // Get the output hidden states from the vision model
         let visionOutput = visionModel(
-            pixelValues, outputHiddenStates: true, spatialShapes: spatialShapes)
+            pixelValues, outputHiddenStates: true, spatialShapes: spatialShapes,
+            pixelAttentionMask: config.isD1 ? pixelAttentionMask : nil)
         let hiddenStates = visionOutput.lastHiddenState
 
         // Get feature lengths from attention mask
@@ -1144,7 +1182,8 @@ public struct LFM2VLConfiguration: Codable, Sendable {
         private let _blockDim: Int?
         public var blockDim: Int { _blockDim ?? hiddenSize }
         private let _blockFFDim: Int?
-        public var blockFFDim: Int { _blockFFDim ?? hiddenSize }
+        private let _intermediateSize: Int?
+        public var blockFFDim: Int { _blockFFDim ?? _intermediateSize ?? hiddenSize }
         private let _blockMultipleOf: Int?
         public var blockMultipleOf: Int { _blockMultipleOf ?? 256 }
         private let _blockFFNDimMultiplier: Float?
@@ -1181,6 +1220,7 @@ public struct LFM2VLConfiguration: Codable, Sendable {
             case _convLCache = "conv_L_cache"
             case _blockDim = "block_dim"
             case _blockFFDim = "block_ff_dim"
+            case _intermediateSize = "intermediate_size"
             case _blockMultipleOf = "block_multiple_of"
             case _blockFFNDimMultiplier = "block_ffn_dim_multiplier"
             case _blockAutoAdjustFFDim = "block_auto_adjust_ff_dim"
@@ -1224,6 +1264,21 @@ public struct LFM2VLConfiguration: Codable, Sendable {
     public let textConfiguration: TextConfiguration
     public let visionConfiguration: VisionConfiguration
     public let modelType: String
+    private let autoMap: D1AutoMap?
+    public var isD1: Bool { autoMap?.model == "modeling_d1.D1Model" }
+
+    private struct D1AutoMap: Codable, Sendable {
+        let model: String?
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            model = try? container.decode(String.self, forKey: .model)
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case model = "AutoModel"
+        }
+    }
     private let _downsampleFactor: Int?
     public var downsampleFactor: Int { _downsampleFactor ?? 2 }
     private let _imageTokenId: Int?
@@ -1254,6 +1309,7 @@ public struct LFM2VLConfiguration: Codable, Sendable {
         case textConfiguration = "text_config"
         case visionConfiguration = "vision_config"
         case modelType = "model_type"
+        case autoMap = "auto_map"
         case _downsampleFactor = "downsample_factor"
         case _imageTokenId = "image_token_id"
         case _projectorBias = "projector_bias"
@@ -1271,6 +1327,32 @@ public struct LFM2VLConfiguration: Codable, Sendable {
 
 /// Configuration for ``LFM2VLProcessor``
 public struct LFM2VLProcessorConfiguration: Codable, Sendable {
+    private let imageProcessor: D1ImageConfiguration?
+    var d1ImageConfiguration: D1ImageConfiguration? { imageProcessor }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let nested = try? container.nestedContainer(
+            keyedBy: D1ProcessorKeys.self, forKey: .imageProcessor),
+            try nested.decodeIfPresent(String.self, forKey: .imageProcessorType)
+                == "Lfm2VlNumpyImageProcessor"
+        {
+            imageProcessor = try container.decode(
+                D1ImageConfiguration.self, forKey: .imageProcessor)
+        } else {
+            imageProcessor = nil
+        }
+        _imageMean = try container.decodeIfPresent([CGFloat].self, forKey: ._imageMean)
+        _imageStd = try container.decodeIfPresent([CGFloat].self, forKey: ._imageStd)
+        _tileSize = try container.decodeIfPresent(Int.self, forKey: ._tileSize)
+        _encoderPatchSize = try container.decodeIfPresent(Int.self, forKey: ._encoderPatchSize)
+        _maxTiles = try container.decodeIfPresent(Int.self, forKey: ._maxTiles)
+        _downsampleFactor = try container.decodeIfPresent(Int.self, forKey: ._downsampleFactor)
+    }
+
+    private enum D1ProcessorKeys: String, CodingKey {
+        case imageProcessorType = "image_processor_type"
+    }
     // Fields at top level (matching typical preprocessor_config.json structure)
     private let _imageMean: [CGFloat]?
     private let _imageStd: [CGFloat]?
@@ -1299,6 +1381,7 @@ public struct LFM2VLProcessorConfiguration: Codable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case imageProcessor = "image_processor"
         case _imageMean = "image_mean"
         case _imageStd = "image_std"
         case _tileSize = "tile_size"

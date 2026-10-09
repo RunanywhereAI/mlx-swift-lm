@@ -342,7 +342,7 @@ final class GLiNERClassificationHead: Module {
     func callAsFunction(_ input: MLXArray) -> MLXArray { fc2(relu(fc1(input))) }
 }
 
-final class GLiNERClassificationNetwork: Module, BaseLanguageModel {
+public final class GLiNERClassificationNetwork: Module, LanguageModel {
     let encoder: GLiNERDeberta
     let classifier: GLiNERClassificationHead
 
@@ -353,6 +353,16 @@ final class GLiNERClassificationNetwork: Module, BaseLanguageModel {
 
     public func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {
         (try? Self.classificationWeights(weights, hidden: encoder.config.hiddenSize)) ?? [:]
+    }
+
+    public func prepare(
+        _ input: LMInput, cache: [KVCache], state: LMOutput.State?, prefill: PrefillParameters
+    ) throws -> PrepareResult {
+        throw GLiNERError.classificationOnly
+    }
+
+    public func newCache(parameters: GenerateParameters?) throws -> [KVCache] {
+        throw GLiNERError.classificationOnly
     }
 
     static func classificationWeights(

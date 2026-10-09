@@ -88,7 +88,12 @@ public enum LLMTypeRegistry {
         "nemotron_labs_diffusion": create(
             NemotronLabsDiffusionConfiguration.self, NemotronLabsDiffusionModel.init),
         "maple": create(MapleConfiguration.self, MapleModel.init),
-        "extractor": create(GLiNEREncoderConfiguration.self, GLiNERClassificationNetwork.init),
+        "extractor": { data in
+            let configuration = try JSONDecoder.json5().decode(
+                GLiNEREncoderConfiguration.self, from: data)
+            try configuration.validate()
+            return GLiNERClassificationNetwork(configuration)
+        },
     ])
 }
 

@@ -66,6 +66,17 @@ final class Qwen35DeciderTests: XCTestCase {
         XCTAssertThrowsError(try Qwen35DeciderEncoder.optionLists(of: question))
     }
 
+    func testJointCheckpointIsNotClaimed() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(component: "decider-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        try Data("{}".utf8).write(to: directory.appending(component: "decision_config.json"))
+        XCTAssertTrue(Qwen35DeciderModel.isDeciderCheckpoint(at: directory))
+        try Data("{}".utf8).write(to: directory.appending(component: "joint_config.json"))
+        XCTAssertFalse(Qwen35DeciderModel.isDeciderCheckpoint(at: directory))
+    }
+
     func testEmptyRequestFails() {
         let request = ClefDecisionRequest(state: "x", questions: [])
         XCTAssertThrowsError(

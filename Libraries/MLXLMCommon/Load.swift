@@ -44,10 +44,24 @@ public func loadWeights(
     quantization: BaseConfiguration.Quantization? = nil,
     perLayerQuantization: BaseConfiguration.PerLayerQuantization? = nil
 ) throws {
+    try loadWeights(
+        weightURLs: try safetensorWeightURLs(in: modelDirectory), model: model,
+        quantization: quantization, perLayerQuantization: perLayerQuantization)
+}
+
+/// Load model weights from an explicit list of `safetensor` files.
+///
+/// For checkpoints that keep extra tensors (a separate head, say) beside the
+/// backbone shards, which the directory scan would otherwise pick up.
+public func loadWeights(
+    weightURLs: [URL], model: BaseLanguageModel,
+    quantization: BaseConfiguration.Quantization? = nil,
+    perLayerQuantization: BaseConfiguration.PerLayerQuantization? = nil
+) throws {
     // load the weights and collect metadata from the first safetensor file
     var weights = [String: MLXArray]()
     var metadata = [String: String]()
-    for url in try safetensorWeightURLs(in: modelDirectory) {
+    for url in weightURLs {
         let (w, m) = try loadArraysAndMetadata(url: url)
         for (key, value) in w {
             weights[key] = value

@@ -81,9 +81,14 @@ public final class Qwen35DeciderModel: @unchecked Sendable {
     }
 
     /// Whether `directory` holds a decider checkpoint.
+    ///
+    /// Joint inline-readout checkpoints (`joint_config.json`, served by
+    /// `Qwen35JointDecider` in MLXVLM) carry a `decision_config.json` too, so
+    /// they are excluded here.
     public static func isDeciderCheckpoint(at directory: URL) -> Bool {
-        FileManager.default.fileExists(
-            atPath: directory.appending(component: "decision_config.json").path)
+        let files = FileManager.default
+        return files.fileExists(atPath: directory.appending(component: "decision_config.json").path)
+            && !files.fileExists(atPath: directory.appending(component: "joint_config.json").path)
     }
 
     /// Loads a decider checkpoint from a local model directory.
@@ -123,7 +128,8 @@ public final class Qwen35DeciderModel: @unchecked Sendable {
         }
         let quantization = try JSONDecoder().decode(
             QuantizationHolder.self,
-            from: Data(contentsOf: configURL)).quantization
+            from: Data(contentsOf: configURL)
+        ).quantization
         do {
             try await loadWeights(
                 modelDirectory: directory, model: backbone, quantization: quantization)
@@ -236,13 +242,17 @@ enum Qwen35DeciderEncoder {
         var encoded: [Qwen35DeciderEncodedQuestion] = []
         for question in request.questions {
             let (keys, descriptions) = try optionLists(of: question)
-            guard (1 ... min(Qwen35DeciderModel.maxOptions, codes.count)).contains(keys.count) else {
+            guard (1 ... min(Qwen35DeciderModel.maxOptions, codes.count)).contains(keys.count)
+            else {
                 throw ClefDecisionEncodingError.missingOptions(question.id)
             }
             var prompt = "State:\n\(request.state)"
-            prompt += "\n\nQuestion:\n\(question.instructions ?? "Choose the best matching option.")"
-            prompt += "\n\nOptions:\n" + zip(codes, descriptions).map { "\($0): \($1)" }.joined(
-                separator: "\n")
+            prompt +=
+                "\n\nQuestion:\n\(question.instructions ?? "Choose the best matching option.")"
+            prompt +=
+                "\n\nOptions:\n"
+                + zip(codes, descriptions).map { "\($0): \($1)" }.joined(
+                    separator: "\n")
             prompt += "\n\nReturn only the letter code of the best option."
             let messages: [[String: any Sendable]] = [
                 [
@@ -272,7 +282,8 @@ enum Qwen35DeciderEncoder {
         var attentionMask: [Int] = []
         for ids in allIds {
             inputIds += Array(repeating: padId, count: width - ids.count) + ids
-            attentionMask += Array(repeating: 0, count: width - ids.count)
+            attentionMask +=
+                Array(repeating: 0, count: width - ids.count)
                 + Array(repeating: 1, count: ids.count)
         }
         return Qwen35DeciderEncoding(
@@ -291,14 +302,18 @@ enum Qwen35DeciderEncoder {
             let sorted = question.options.sorted { $0.key < $1.key }
             return (
                 sorted.map(\.key),
-                sorted.map { option in option.description.map { "\(option.key): \($0)" } ?? option.key })
+                sorted.map { option in
+                    option.description.map { "\(option.key): \($0)" } ?? option.key
+                }
+            )
         case .score:
             guard question.options.count >= 2 else {
                 throw ClefDecisionEncodingError.missingOptions(question.id)
             }
             return (
                 question.options.indices.map(String.init),
-                question.options.map { $0.description ?? "" })
+                question.options.map { $0.description ?? "" }
+            )
         case .noul:
             let falseText =
                 question.options.first { $0.key == "false" }?.description ?? "No / false"

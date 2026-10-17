@@ -766,7 +766,8 @@ enum Qwen35Language {
             cache: [KVCache?]? = nil,
             positionIds: MLXArray? = nil,
             applyFinalNorm: Bool = true,
-            checkpointAfter: Int? = nil
+            checkpointAfter: Int? = nil,
+            fullAttention: FullAttentionMode = .causal
         ) -> MLXArray {
             var hiddenStates: MLXArray
             if let inputsEmbeds {
@@ -783,7 +784,9 @@ enum Qwen35Language {
             let faMaskMode = createAttentionMask(
                 h: hiddenStates, cache: cacheArray?[faIdx], returnArray: true)
             let faMask: MLXArray?
-            if case .array(let arrayMask) = faMaskMode {
+            if fullAttention == .bidirectional {
+                faMask = nil
+            } else if case .array(let arrayMask) = faMaskMode {
                 faMask = arrayMask
             } else {
                 faMask = nil
@@ -1368,7 +1371,18 @@ public class Qwen35: Module, VLMModel {
                     // language model tensors at bare `model.*` paths instead of
                     // `model.language_model.*`. Mirror the LLM-side fallback.
                     key = "language_model." + key
+                } else if key.hasPrefix("language_model."),
+                    !key.hasPrefix("language_model.model."),
+                    !key.hasPrefix("language_model.lm_head")
+                {
+                    // Checkpoints saved from the bare `Qwen3_5Model` (no
+                    // conditional-generation wrapper, e.g. the pplx deciders)
+                    // drop the inner `model.` level.
+                    key = "language_model.model." + key.dropFirst("language_model.".count)
                 }
+            } else if key.hasPrefix("visual.") {
+                // Same bare `Qwen3_5Model` layout, vision side.
+                key = "vision_tower." + key.dropFirst("visual.".count)
             } else if key.contains("lm_head") {
                 key = key.replacingOccurrences(of: "lm_head", with: "language_model.lm_head")
             }
@@ -1386,6 +1400,32 @@ public class Qwen35: Module, VLMModel {
         }
 
         return visionModel.sanitize(weights: sanitized)
+    }
+}
+
+extension Qwen35 {
+    /// Final-norm hidden states for every position of `input`, in one
+    /// uncached forward pass with the vision tower merged in.
+    ///
+    /// For readout heads that score positions directly instead of sampling
+    /// from the vocabulary head.
+    public func hiddenStates(
+        for input: LMInput, fullAttention: FullAttentionMode
+    ) throws -> MLXArray {
+        let inputIds =
+            input.text.tokens.ndim == 1 ? input.text.tokens[.newAxis, 0...] : input.text.tokens
+        let (_, imageFrames, videoFrames, inputEmbeddings) = try visionInputEmbeddings(input)
+        let (positionIds, _) = Qwen3VLLanguage.getRopeIndex(
+            inputIds: inputIds,
+            imageGridTHW: imageFrames,
+            videoGridTHW: videoFrames,
+            spatialMergeSize: config.visionConfiguration.spatialMergeSize,
+            imageTokenId: config.imageTokenId,
+            videoTokenId: config.videoTokenId,
+            visionStartTokenId: config.visionStartTokenId)
+        return languageModel.model(
+            inputIds, inputsEmbeds: inputEmbeddings, cache: nil, positionIds: positionIds,
+            fullAttention: fullAttention)
     }
 }
 

@@ -1,5 +1,8 @@
 # RunAnywhere mlx-swift-lm fork
 
+Branches, pull requests, upstream syncs and releases follow [repo-action.md](repo-action.md).
+That file is binding for every change in this fork. Pull requests target `ra/main`, never `main`.
+
 This fork tracks canonical `ml-explore/mlx-swift-lm`. It exists for two narrow
 reasons:
 

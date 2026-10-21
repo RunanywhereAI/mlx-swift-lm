@@ -149,6 +149,7 @@ final class FlintTests: XCTestCase {
         XCTAssertNotNil(layers[1].selfAttn.rope)
         XCTAssertEqual(model.kvHeads, [2, 2, 2, 2])
         XCTAssertEqual(model.loraLayers.count, 4)
+        XCTAssertEqual(model.toolCallFormat, .glm4)
     }
 
     // MARK: Forward pass

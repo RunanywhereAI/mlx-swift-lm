@@ -426,3 +426,11 @@ extension FlintModel: LoRAModel {
         model.layers
     }
 }
+
+// MARK: - Chat conventions
+
+extension FlintModel {
+    /// Flint's template emits GLM-style `<arg_key>`/`<arg_value>` tool calls. Declared on the
+    /// model so a checkpoint loaded from a directory parses them without a registry entry.
+    public var toolCallFormat: ToolCallFormat? { .glm4 }
+}

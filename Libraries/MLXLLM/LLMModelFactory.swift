@@ -71,6 +71,7 @@ public enum LLMTypeRegistry {
         "baichuan_m1": create(BaichuanM1Configuration.self, BaichuanM1Model.init),
         "exaone4": create(Exaone4Configuration.self, Exaone4Model.init),
         "gpt_oss": create(GPTOSSConfiguration.self, GPTOSSModel.init),
+        "flint": create(FlintConfiguration.self, FlintModel.init),
         "lille-130m": create(Lille130mConfiguration.self, Lille130mModel.init),
         "olmoe": create(OlmoEConfiguration.self, OlmoEModel.init),
         "olmo2": create(Olmo2Configuration.self, Olmo2Model.init),
@@ -398,6 +399,12 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
         toolCallFormat: .glm4
     )
 
+    static public let flint_int4 = ModelConfiguration(
+        id: "RecursiveSI/flint-int4",
+        defaultPrompt: "Write a Python function that reverses a linked list.",
+        toolCallFormat: .glm4
+    )
+
     static public let acereason_7b_4bit = ModelConfiguration(
         id: "mlx-community/AceReason-Nemotron-7B-4bit",
         defaultPrompt: ""
@@ -489,6 +496,7 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
         [
             maplePreview2Bit,
             codeLlama13b4bit,
+            flint_int4,
             deepSeekR1_7B_4bit,
             falconH1R7B,
             gemma2bQuantized,

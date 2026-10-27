@@ -104,6 +104,8 @@ public enum VLMTypeRegistry {
         "pixtral": create(PixtralConfiguration.self, PixtralVLM.init),
         "mistral3": create(Mistral3VLMConfiguration.self, Mistral3VLM.init),
         "lfm2_vl": create(LFM2VLConfiguration.self, LFM2VL.init),
+        "lfm3_vl": create(LFM3VLConfiguration.self, LFM3VL.init),
+        "lfm3_omni": create(LFM3OmniConfiguration.self, LFM3Omni.init),
         "d1_omni": create(D1OmniConfiguration.self, D1Omni.init),
         "lfm2-vl": create(LFM2VLConfiguration.self, LFM2VL.init),
         "glm_ocr": create(GlmOcrConfiguration.self, GlmOcr.init),
@@ -141,6 +143,8 @@ public enum VLMProcessorTypeRegistry {
             Mistral3VLMProcessorConfiguration.self, Mistral3VLMProcessor.init),
         "Lfm2VlProcessor": create(
             LFM2VLProcessorConfiguration.self, LFM2VLProcessor.init),
+        "Lfm3VlProcessor": create(LFM3ProcessorConfiguration.self, LFM3Processor.init),
+        "Lfm3OmniProcessor": create(LFM3ProcessorConfiguration.self, LFM3Processor.init),
         "Glm46VProcessor": create(
             GlmOcrProcessorConfiguration.self, GlmOcrProcessor.init),
         "MuseGlimmerProcessor": create(

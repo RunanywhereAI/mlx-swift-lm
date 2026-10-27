@@ -40,6 +40,7 @@ let package = Package(
         .library(
             name: "IntegrationTestHelpers",
             targets: ["IntegrationTestHelpers"]),
+        .executable(name: "lfm3-try", targets: ["lfm3-try"]),
     ],
     traits: [
         // Gates the MLXLanguageModel adapter for Apple's FoundationModels
@@ -304,6 +305,15 @@ let package = Package(
         // Direct C-API tests for the CXGrammar shim. No FoundationModels
         // dependency; exercises the vendored xgrammar C++ library through
         // the shim's public C entry points.
+        .executableTarget(
+            name: "lfm3-try",
+            dependencies: [
+                "MLXVLM",
+                "MLXLMCommon",
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ],
+            path: "Tools/lfm3-try"
+        ),
         .testTarget(
             name: "CXGrammarTests",
             dependencies: ["MLXCXGrammar"],
